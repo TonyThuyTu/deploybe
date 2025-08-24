@@ -29,7 +29,7 @@ sequelize.authenticate()
 
 // Middlewares
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://deployfe-vtt9.onrender.com',
+  origin: process.env.FRONTEND_URL || 'https://deployfe-sa4d.onrender.com',
   credentials: true, // Cho phép gửi cookie qua trình duyệt
 }));
 
