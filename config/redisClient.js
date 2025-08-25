@@ -8,3 +8,24 @@ const redisClient = createClient({
 redisClient.on('error', (err) => console.error('❌ Redis Client Error', err));
 
 module.exports = redisClient;
+
+
+// import { createClient } from 'redis';
+
+// const client = createClient({
+//     username: 'default',
+//     password: 'ctznwrNlh0fAQ5rppPuqEuyKUgD8xTrn',
+//     socket: {
+//         host: 'redis-17355.c270.us-east-1-3.ec2.redns.redis-cloud.com',
+//         port: 17355
+//     }
+// });
+
+// client.on('error', err => console.log('Redis Client Error', err));
+
+// await client.connect();
+
+// await client.set('foo', 'bar');
+// const result = await client.get('foo');
+// console.log(result)  // >>> bar
+
