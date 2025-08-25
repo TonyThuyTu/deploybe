@@ -46,6 +46,21 @@ exports.checkout = async (req, res) => {
     const shipping_fee = 0;
     const orderDetails = [];
 
+    // kiểm tra các sản phẩm có còn hàng không theo id_variant của model 
+    for (const item of cart_items) {
+      if (item.id_variant) {
+        const variant = await db.ProductVariant.findOne({
+          where: { id_variant: item.id_variant }
+        });
+        if (!variant) {
+          return res.status(500).json({ message: "Sản phẩm không tồn tại", error: error.message });
+        }
+        if (variant.quantity < item.quantity) {
+          return res.status(400).json({ message: `Sản phẩm chỉ còn ${variant.quantity} trong kho.` });
+        }
+      }
+    }
+
     for (const item of cart_items) {
       const product = await db.Product.findByPk(item.id_product);
       if (!product) throw new Error(`Sản phẩm với ID ${item.id_product} không tồn tại.`);
@@ -81,9 +96,9 @@ exports.checkout = async (req, res) => {
         final_price: price,
         products_item,
         options: item.attribute_value_ids || []
-    });
-    console.log(`Product ${product.products_name} price calculated: ${price}`);
+      });
     }
+
 
     // Xác định tổng tiền lưu vào DB
     const totalAmountToSave =
@@ -134,6 +149,20 @@ exports.checkout = async (req, res) => {
       }
     }
 
+    // giảm sản product_variant theo số lượng đã mua
+    for (const item of cart_items) {
+      if (item.id_variant) {
+        const variant = await db.ProductVariant.findOne({
+          where: { id_variant: item.id_variant }
+        });
+        if (variant) {
+          let newQuantity = variant.quantity - item.quantity;
+          if (newQuantity < 0) newQuantity = 0;
+          await variant.update({ quantity: newQuantity }, { transaction: t });
+        }
+      }
+    }
+
     // Cập nhật payment_status cho COD
     if (payment_method === 1) {
       await newOrder.update(
@@ -172,8 +201,8 @@ exports.checkout = async (req, res) => {
           orderInfo: `Thanh toán đơn hàng ${newOrder.id_order}`,
         });
       } catch (err) {
-        return res.status(500).json({ 
-          message: "Đơn hàng đã được tạo nhưng có lỗi thanh toán MoMo", 
+        return res.status(500).json({
+          message: "Đơn hàng đã được tạo nhưng có lỗi thanh toán MoMo",
           error: err.message,
           orderId: newOrder.id_order
         });
@@ -294,7 +323,7 @@ exports.getAllOrders = async (req, res) => {
       order_status,
       payment_status,
       order_date,
-      
+
     } = req.query;
 
     const offset = (page - 1) * limit;
@@ -381,11 +410,11 @@ exports.getOrderDetail = async (req, res) => {
   try {
     const order = await db.Order.findOne({
       where: { id_order: id },
-        attributes: [
-          'id_order', 'id_customer', 'name', 'phone', 'email',
-          'address', 'total_amount', 'payment_method', 'order_status','payment_status',
-          'order_date', 'shipping_fee', 'note'
-        ],
+      attributes: [
+        'id_order', 'id_customer', 'name', 'phone', 'email',
+        'address', 'total_amount', 'payment_method', 'order_status', 'payment_status',
+        'order_date', 'shipping_fee', 'note'
+      ],
       include: [
         {
           model: db.Customer,
@@ -496,17 +525,17 @@ exports.updateOrderStatus = async (req, res) => {
   try {
     // Kiểm tra tính hợp lệ của trạng thái đơn hàng
     if (order_status && !validOrderStatuses.includes(order_status)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Trạng thái đơn hàng không hợp lệ',
-        validOrderStatuses 
+        validOrderStatuses
       });
     }
 
     // Kiểm tra tính hợp lệ của trạng thái thanh toán
     if (payment_status && !validPaymentStatuses.includes(payment_status)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Trạng thái thanh toán không hợp lệ',
-        validPaymentStatuses 
+        validPaymentStatuses
       });
     }
 
@@ -518,15 +547,15 @@ exports.updateOrderStatus = async (req, res) => {
     // Kiểm tra điều kiện chuyển trạng thái đơn hàng
     if (order_status) {
       const currentStatus = order.order_status;
-      const isValidOrderTransition = 
+      const isValidOrderTransition =
         (currentStatus === 'pending' && ['processing', 'confirmed', 'cancelled'].includes(order_status)) ||
         (currentStatus === 'processing' && ['confirmed', 'cancelled'].includes(order_status)) ||
         (currentStatus === 'confirmed' && ['completed', 'cancelled'].includes(order_status)) ||
         (currentStatus === order_status); // Cho phép giữ nguyên trạng thái
 
       if (!isValidOrderTransition) {
-        return res.status(400).json({ 
-          message: `Không thể chuyển từ trạng thái ${currentStatus} sang ${order_status}` 
+        return res.status(400).json({
+          message: `Không thể chuyển từ trạng thái ${currentStatus} sang ${order_status}`
         });
       }
     }
@@ -534,13 +563,13 @@ exports.updateOrderStatus = async (req, res) => {
     // Kiểm tra điều kiện chuyển trạng thái thanh toán
     if (payment_status) {
       const currentPaymentStatus = order.payment_status;
-      const isValidPaymentTransition = 
+      const isValidPaymentTransition =
         (currentPaymentStatus === 'pending' && ['paid', 'failed'].includes(payment_status)) ||
         (currentPaymentStatus === payment_status); // Cho phép giữ nguyên trạng thái
 
       if (!isValidPaymentTransition) {
-        return res.status(400).json({ 
-          message: `Không thể chuyển từ trạng thái thanh toán ${currentPaymentStatus} sang ${payment_status}` 
+        return res.status(400).json({
+          message: `Không thể chuyển từ trạng thái thanh toán ${currentPaymentStatus} sang ${payment_status}`
         });
       }
     }
@@ -553,16 +582,16 @@ exports.updateOrderStatus = async (req, res) => {
     // Cập nhật trạng thái
     await order.update(updateData);
 
-    res.json({ 
+    res.json({
       message: 'Cập nhật hàng thành công',
       order_status: order.order_status,
       payment_status: order.payment_status
     });
   } catch (error) {
     console.error('Lỗi khi cập nhật trạng thái đơn hàng:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Lỗi server khi cập nhật trạng thái đơn hàng',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -606,9 +635,9 @@ exports.confirmOnlinePayment = async (req, res) => {
     }
 
     if (order.payment_status === 'paid') {
-      return res.json({ 
+      return res.json({
         message: 'Đơn hàng đã được xác nhận trước đó',
-        payment_status: order.payment_status 
+        payment_status: order.payment_status
       });
     }
 
@@ -618,7 +647,7 @@ exports.confirmOnlinePayment = async (req, res) => {
     }
 
     if (order.order_status !== 'pending' || order.payment_status !== 'pending') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Đơn hàng không ở trạng thái pending để có thể xác nhận',
         current_payment_status: order.payment_status
       });
@@ -674,9 +703,9 @@ exports.confirmOnlinePayment = async (req, res) => {
 
   } catch (error) {
     console.error('Error confirming online payment:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Lỗi server khi xác nhận thanh toán',
-      error: error.message 
+      error: error.message
     });
   }
 };
